@@ -11,6 +11,10 @@ from adapters.Redis.MainClass import RedisClient
 from adapters.Minio.MainClass import MinioClient
 
 from adapters.EnvLoader.MainClass import EnvLoader, root_path
+from adapters.EnvLoader.Errors import EnvLoaderError
+import importlib
+
+from flask import Flask
 
 class VM:
     def __init__(self):
@@ -143,4 +147,74 @@ class VM:
             files_table=self.files_table,
             minio_client=self.minio_client,
             redis_client=self.redis_client
+        )
+
+class FlaskVM:
+    def __init__(
+        self,
+        app: Flask,
+        vm: VM
+    ):
+        self.app = app
+        self.vm = vm
+        self.root_path = Path(root_path)
+        self.envloader = EnvLoader()
+        self.env = self.envloader.load_vars_from_env(
+            path=self.root_path / ".env"
+        )
+    def mapApplications(self):
+        microapps = self.envloader.scan_directory(
+            directory=self.root_path / "microapps",
+            root_path=self.root_path
+        )
+        for _, meta in microapps.items():
+            if meta["type"] != "dir":
+                continue
+            source = Path(meta["source"])
+            endpoints_path = source / "web" / "Endpoints.py"
+            if not endpoints_path.exists():
+                continue
+            pypath = self.envloader.path_to_pypath(
+                endpoints_path,
+                self.root_path
+            )
+            url_prefix = source.name
+            self._mapApplication(
+                pypath=pypath,
+                url_prefix=url_prefix
+            )
+    def _mapApplication(
+        self,
+        *,
+        pypath: str,
+        url_prefix: str
+    ):
+        if not self.app:
+            raise EnvLoaderError("La aplicación Flask es inválida.")
+        if not pypath:
+            raise EnvLoaderError("El pypath es inválido.")
+        try:
+            module = importlib.import_module(pypath)
+        except Exception as e:
+            raise EnvLoaderError(
+                f"Error importando '{pypath}': {e}"
+            )
+        if not hasattr(module, "register"):
+            raise EnvLoaderError(
+                f"El módulo '{pypath}' debe exponer register(app, ...)"
+            )
+        module.register(
+            app=self.app,
+            _vm=self.vm
+        )
+        print(f"Registrado: /{url_prefix} ← {pypath}")
+    def play_and_debug(self): 
+        self.mapApplications() 
+        host = str(self.env.get( "flask_host" )) 
+        port = int(self.env.get( "flask_port" )) 
+        debug = True 
+        self.app.run(
+            host=host, 
+            port=port, 
+            debug=debug 
         )

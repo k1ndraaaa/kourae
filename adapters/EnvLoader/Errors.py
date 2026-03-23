@@ -1,6 +1,6 @@
 class BaseError(Exception):pass
 
-class EnvManagerError(BaseError): 
+class EnvLoaderError(BaseError): 
     description = "Error relacionado al entorno"
     pass
 

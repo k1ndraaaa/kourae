@@ -1,10 +1,10 @@
 #Componentes a usar
-from dotenv import load_dotenv, dotenv_values #type:ignore
+from dotenv import load_dotenv, dotenv_values
 from adapters.EnvLoader.Errors import *
 from pathlib import Path
 import os
 
-root_str_path = "/home/kourae/Documents/kourae-net"
+root_str_path = "/home/kourae/Documents/kourae"
 root_path = Path(root_str_path)
 
 class EnvLoader:
@@ -17,7 +17,7 @@ class EnvLoader:
     ):
         env = {}
         if not os.path.exists(path):
-            raise EnvManagerError(f"Env path no existe")
+            raise EnvLoaderError(f"Env path no existe")
         env_vars = dotenv_values(path)
         if inject:
             load_dotenv(dotenv_path=path, override=True)
@@ -33,13 +33,13 @@ class EnvLoader:
         path = Path(path).resolve()
         package_root = Path(package_root).resolve()
         if not path.is_file():
-            raise EnvManagerError(f"No es un archivo válido: {path}")
+            raise EnvLoaderError(f"No es un archivo válido: {path}")
         if path.suffix != ".py":
-            raise EnvManagerError(f"No es un archivo Python: {path}")
+            raise EnvLoaderError(f"No es un archivo Python: {path}")
         try:
             relative = path.relative_to(package_root)
         except ValueError:
-            raise EnvManagerError("El archivo no está dentro del package_root")
+            raise EnvLoaderError("El archivo no está dentro del package_root")
         return ".".join(relative.with_suffix("").parts)
     def scan_directory(self, directory: Path, root_path: Path, ignored_dirs=None, ignored_files=None):
         if ignored_dirs is None: ignored_dirs = []
