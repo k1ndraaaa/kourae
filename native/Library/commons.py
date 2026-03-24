@@ -406,3 +406,14 @@ def build_conditions(conditions):
         sql_parts.append(part_sql)
         params.extend(part_params)
     return " AND ".join(sql_parts), params
+
+class Router:
+    def __init__(self, vm, prefix):
+        self.vm = vm
+        self.prefix = prefix
+    def route(self, route, **kwargs):
+        return self.vm.route(self.prefix + route, **kwargs)
+    def get(self, route, **kwargs):
+        return self.vm.get(self.prefix + route, **kwargs)
+    def post(self, route, **kwargs):
+        return self.vm.post(self.prefix + route, **kwargs)

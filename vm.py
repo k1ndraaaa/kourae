@@ -2,19 +2,18 @@ from native.LogManager.MainClass import LogManager, LOG_ERROR, LOG_INFO, LOG_WAR
 from native.JwtManager.MainClass import JwtManager
 from native.Auth.MainClass import Auth
 from native.Streaming.MainClass import Streaming
-from native.Library.commons import Session
-
+from native.Library.commons import Session, Router
+from native.Library.translators import translate_request
 from pathlib import Path
-
+from functools import wraps
 from adapters.Postgresql.MainClass import PostgresClient as SqlClient, Table
 from adapters.Redis.MainClass import RedisClient
 from adapters.Minio.MainClass import MinioClient
-
 from adapters.EnvLoader.MainClass import EnvLoader, root_path
 from adapters.EnvLoader.Errors import EnvLoaderError
-import importlib
-
-from flask import Flask
+import importlib, inspect
+from flask import Flask, request
+from native.Library.guards import RequestContext,set_request_context,GuardPipeline,AuthGuard,HeaderGuard,ContentTypeGuard
 
 class VM:
     def __init__(self):
@@ -152,16 +151,95 @@ class VM:
 class FlaskVM:
     def __init__(
         self,
-        app: Flask,
+        name,
         vm: VM
     ):
-        self.app = app
+        self.app = Flask(name)
         self.vm = vm
         self.root_path = Path(root_path)
         self.envloader = EnvLoader()
         self.env = self.envloader.load_vars_from_env(
             path=self.root_path / ".env"
         )
+    def guarded_endpoint(
+        self,
+        *,
+        require_auth: bool = False,
+        expected_mimetype=None,
+        request_headers=None,
+        guards=None
+    ):
+        pipeline_guards = []
+        if expected_mimetype:
+            pipeline_guards.append(
+                ContentTypeGuard(expected_mimetype)
+            )
+        if request_headers:
+            pipeline_guards.append(
+                HeaderGuard(request_headers)
+            )
+        if require_auth:
+            pipeline_guards.append(
+                AuthGuard()
+            )
+        if guards:
+            pipeline_guards.extend(guards)
+        pipeline = GuardPipeline(pipeline_guards)
+        def decorator(fn):
+            params = inspect.signature(fn).parameters
+            wants_request = "request" in params
+            @wraps(fn)
+            def wrapper(*args, **kwargs):
+                framework_request = request
+                standar_request = translate_request(
+                    framework_request
+                )
+                ctx_obj = RequestContext(
+                    request=standar_request,
+                    vm=self.vm
+                )
+                set_request_context(ctx_obj)
+                ok, resp = pipeline.run(ctx_obj)
+                if not ok:
+                    return ctx_obj.vm.log_manager.http_response(resp)
+                if wants_request:
+                    kwargs["request"] = ctx_obj.request
+                return fn(*args, **kwargs)
+            return wrapper
+        return decorator
+    def route(
+        self,
+        route: str,
+        methods=None,
+        require_auth=False,
+        expected_mimetype=None,
+        request_headers=None,
+        guards=None
+    ):
+        methods = methods or ["GET"]
+        route = route.replace("{", "<").replace("}", ">")
+        def decorator(func):
+            func = self.guarded_endpoint(
+                require_auth=require_auth,
+                expected_mimetype=expected_mimetype,
+                request_headers=request_headers,
+                guards=guards
+            )(func)
+            return self.app.route(
+                route,
+                methods=methods
+            )(func)
+        return decorator
+    def get(self, route, **kwargs):
+        return self.route(route, methods=["GET"], **kwargs)
+    def post(self, route, **kwargs):
+        return self.route(route, methods=["POST"], **kwargs)
+    def put(self, route, **kwargs):
+        return self.route(route, methods=["PUT"], **kwargs)
+    def delete(self, route, **kwargs):
+        return self.route(route, methods=["DELETE"], **kwargs)
+    def group(self, prefix: str):
+        return Router(self, prefix)
     def mapApplications(self):
         microapps = self.envloader.scan_directory(
             directory=self.root_path / "microapps",
@@ -189,32 +267,26 @@ class FlaskVM:
         pypath: str,
         url_prefix: str
     ):
-        if not self.app:
-            raise EnvLoaderError("La aplicación Flask es inválida.")
-        if not pypath:
-            raise EnvLoaderError("El pypath es inválido.")
         try:
             module = importlib.import_module(pypath)
         except Exception as e:
             raise EnvLoaderError(
                 f"Error importando '{pypath}': {e}"
             )
-        if not hasattr(module, "register"):
+        if not hasattr(module, "main"):
             raise EnvLoaderError(
-                f"El módulo '{pypath}' debe exponer register(app, ...)"
+                f"El módulo '{pypath}' debe exponer main(vm)"
             )
-        module.register(
-            app=self.app,
-            _vm=self.vm
+        module.main(flask_vm=self)
+        print(
+            f"Registrado: /{url_prefix} ← {pypath}"
         )
-        print(f"Registrado: /{url_prefix} ← {pypath}")
-    def play_and_debug(self): 
-        self.mapApplications() 
-        host = str(self.env.get( "flask_host" )) 
-        port = int(self.env.get( "flask_port" )) 
-        debug = True 
+    def play_and_debug(self):
+        self.mapApplications()
+        host = str(self.env.get("flask_host"))
+        port = int(self.env.get("flask_port"))
         self.app.run(
-            host=host, 
-            port=port, 
-            debug=debug 
+            host=host,
+            port=port,
+            debug=True
         )

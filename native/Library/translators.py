@@ -1,7 +1,7 @@
 from __future__ import annotations
 import base64, asyncio
 from typing import Any, Dict, List, Callable
-from native.Library.commons import _is_instance_of, _check, to_binary_io, Client, Auth, TranslatorEntry, Request, FrameworkAdapter
+from native.Library.commons import _is_instance_of, _check, to_binary_io, Client, Auth, TranslatorEntry, Request
 
 #traductores
 def translate_flask_request(flask_req: Any) -> Request:

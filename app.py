@@ -1,5 +1,12 @@
 from vm import VM, FlaskVM
-from flask import Flask
 
-flask_vm = FlaskVM(app=Flask(__name__), vm=VM())
+flask_vm = FlaskVM(
+    name = __name__,
+    vm = VM()
+)
+
+@flask_vm.get("/")
+def index():
+    return "Bienvenido a la aplicación"
+
 flask_vm.play_and_debug()
