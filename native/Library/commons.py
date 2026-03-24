@@ -223,6 +223,7 @@ class Client:
     ip: Optional[str] = None
     port: Optional[int] = None
     user_agent: Optional[str] = None
+    language: Optional[str] = None
 
 @dataclass(frozen=True, slots=True)
 class Auth:

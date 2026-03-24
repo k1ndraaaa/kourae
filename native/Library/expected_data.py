@@ -1,6 +1,20 @@
 from native.Library.commons import Request as StandarRequest, Field
 from collections.abc import Sized
 
+def get_cloudflare_ip(request: StandarRequest):
+    headers = request.headers
+    
+    if "cf-connecting-ip" in headers:
+        return headers["cf-connecting-ip"]
+    
+    if "x-forwarded-for" in headers:
+        return headers["x-forwarded-for"].split(",")[0].strip()
+    
+    return request.client.ip
+
+def get_user_language(request: StandarRequest):
+    return request.client.language
+
 class ExpectedData:
     def __init__(self, request: StandarRequest):
         self.fields: dict[str, Field] = {}

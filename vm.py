@@ -10,15 +10,17 @@ from adapters.Postgresql.MainClass import PostgresClient as SqlClient, Table
 from adapters.Redis.MainClass import RedisClient
 from adapters.Minio.MainClass import MinioClient
 from adapters.EnvLoader.MainClass import EnvLoader, root_path
+from adapters.LibreTranslate.MainClass import LibreTranslateClient
 from adapters.EnvLoader.Errors import EnvLoaderError
 import importlib, inspect
-from flask import Flask, request
+from flask import Flask, request, make_response, render_template, redirect, url_for
 from native.Library.guards import RequestContext,set_request_context,GuardPipeline,AuthGuard,HeaderGuard,ContentTypeGuard
 
 class VM:
     def __init__(self):
         self.log_manager = LogManager()
         self.jwt_manager = JwtManager()
+        self.translator = LibreTranslateClient()
         self.session = Session()
         mypath = Path(root_path)
         self.env = EnvLoader().load_vars_from_env(
@@ -277,7 +279,7 @@ class FlaskVM:
             raise EnvLoaderError(
                 f"El módulo '{pypath}' debe exponer main(vm)"
             )
-        module.main(flask_vm=self)
+        module.main(webframework=self)
         print(
             f"Registrado: /{url_prefix} ← {pypath}"
         )
@@ -290,3 +292,51 @@ class FlaskVM:
             port=port,
             debug=True
         )
+    def attach_session(
+        self,
+        access_token: str,
+        refresh_token: str,
+        session_address: str,
+        body: any = None
+    ):
+        response = make_response(body)
+        
+        response.set_cookie(
+            "sessionID",
+            access_token,
+            httponly=True,
+            secure=True,
+            samesite="Lax"
+        )
+        response.set_cookie(
+            "refresh_token",
+            refresh_token,
+            httponly=True,
+            secure=True,
+            samesite="Lax"
+        )
+        response.set_cookie(
+            "session_addr",
+            session_address,
+            httponly=True,
+            secure=True,
+            samesite="Lax"
+        )
+        return response
+    
+    def render_page(
+        self,
+        page_name: str
+    ):
+        return render_template(
+            page_name
+        )
+    def redirect(self, to, **params):
+        if isinstance(to, str) and to.startswith("/"):
+            return redirect(to)
+        if inspect.isfunction(to):
+            endpoint = to.__name__
+            return redirect(url_for(endpoint, **params))
+        if isinstance(to, str):
+            return redirect(url_for(to, **params))
+        raise ValueError("Destino de redirect inválido")

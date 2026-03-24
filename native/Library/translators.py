@@ -31,6 +31,7 @@ def translate_flask_request(flask_req: Any) -> Request:
     client = Client(
         ip=client_ip,
         user_agent=headers_lower.get("user-agent"),
+        language=flask_req.accept_languages.best.split("-")[0]
     )
     auth_obj = Auth()
     if flask_req.authorization:
@@ -88,6 +89,7 @@ def translate_django_request(django_req: Any) -> Request:
     client = Client(
         ip=client_ip,
         user_agent=headers_lower.get("user-agent"),
+        language=headers_lower.get("accept-language")
     )
     auth_obj = Auth()
     auth_header = headers_lower.get("authorization")
@@ -165,6 +167,7 @@ async def translate_fastapi_request(fastapi_req: Any) -> Request:
     client = Client(
         ip=client_ip,
         user_agent=headers_lower.get("user-agent"),
+        language=headers_lower.get("accept-language")
     )
     auth_obj = Auth()
     auth_header = headers_lower.get("authorization")
